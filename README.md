@@ -1,2 +1,3 @@
 # raft
-A simple implementation of the Raft consensus protocol by using Golang
+
+A Simple Implementation Of The Raft Consensus Protocol By Using Golang

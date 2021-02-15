@@ -23,6 +23,7 @@ type Server struct {
 	rpcServer *rpc.Server
 	listener  net.Listener
 
+	commitChan  chan<- CommitEntry
 	peerClients map[int]*rpc.Client
 
 	ready <-chan interface{}
@@ -30,12 +31,13 @@ type Server struct {
 	wg    sync.WaitGroup
 }
 
-func NewServer(serverId int, peerIds []int, ready <-chan interface{}) *Server {
+func NewServer(serverId int, peerIds []int, ready <-chan interface{}, commitChan chan<- CommitEntry) *Server {
 	s := new(Server)
 	s.serverId = serverId
 	s.peerIds = peerIds
 	s.peerClients = make(map[int]*rpc.Client)
 	s.ready = ready
+	s.commitChan = commitChan
 	s.quit = make(chan interface{})
 
 	return s
@@ -43,7 +45,7 @@ func NewServer(serverId int, peerIds []int, ready <-chan interface{}) *Server {
 
 func (s *Server) Serve() {
 	s.mu.Lock()
-	s.cm = NewConsensusModule(s.serverId, s.peerIds, s, s.ready)
+	s.cm = NewConsensusModule(s.serverId, s.peerIds, s, s.ready, s.commitChan)
 
 	s.rpcServer = rpc.NewServer()
 	s.rpcProxy = &RPCProxy{cm: s.cm}
@@ -55,7 +57,7 @@ func (s *Server) Serve() {
 	}
 
 	log.Printf("[%v] listening at %s", s.serverId, s.listener.Addr())
-	s.mu.Lock()
+	s.mu.Unlock()
 
 	s.wg.Add(1)
 	go func() {
@@ -148,7 +150,7 @@ func (rpp *RPCProxy) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) 
 		dice := rand.Intn(10)
 		if dice == 9 {
 			rpp.cm.debuglog("drop RequestVote")
-			return fmt.Errorf("RPC failed")
+			return fmt.Errorf("RPC failed")                 
 		} else if dice == 8 {
 			rpp.cm.debuglog("delay RequestVote")
 			time.Sleep(75 * time.Millisecond)
